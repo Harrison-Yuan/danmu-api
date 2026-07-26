@@ -1703,17 +1703,40 @@ export async function matchAnime(url, req, clientIp) {
       resData["isMatched"] = true;
       log("info", `[system] [Match] AI match found: ${resAnime.animeTitle}; episode: ${resEpisode.episodeTitle}`);
     } else {
-      // AI匹配失败或未配置，使用传统匹配方式
+      // AI匹配失败或未配置，使用传统匹配方式，收集所有平台的匹配结果
+      const platformMatches = [];
       for (const platform of dynamicPlatformOrder) {
         const __ret = await matchAniAndEp(season, episode, year, searchData, title, req, platform, preferAnimeId, offsets, requestAnimeDetailsMap);
-        resEpisode = __ret.resEpisode;
-        resAnime = __ret.resAnime;
+        const pEpisode = __ret.resEpisode;
+        const pAnime = __ret.resAnime;
 
-        if (resAnime) {
-          resData["isMatched"] = true;
-          log("info", `[system] [Match] Found match with platform: ${platform || 'default'}`);
-          break;
+        if (pAnime) {
+          platformMatches.push({ anime: pAnime, episode: pEpisode });
+          // 沿用第一个匹配作为主结果（用于 lastSearch / buildBangumiData）
+          if (!resAnime) {
+            resEpisode = pEpisode;
+            resAnime = pAnime;
+            resData["isMatched"] = true;
+            log("info", `[system] [Match] Found match with platform: ${platform || 'default'}`);
+          } else {
+            log("info", `[system] [Match] Found additional match with platform: ${platform || 'default'}`);
+          }
         }
+      }
+      // 将所有平台匹配结果加入 matches 数组
+      for (const { anime, episode } of platformMatches) {
+        resData["matches"].push(
+          AnimeMatch.fromJson({
+            "episodeId": episode.episodeId,
+            "animeId": anime.animeId,
+            "animeTitle": anime.animeTitle,
+            "episodeTitle": episode.episodeTitle,
+            "type": anime.type,
+            "typeDescription": anime.typeDescription,
+            "shift": 0,
+            "imageUrl": anime.imageUrl
+          })
+        );
       }
 
       // 如果都没有找到则返回第一个满足剧集数的剧集
