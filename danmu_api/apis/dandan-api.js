@@ -1379,6 +1379,14 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
             currentScore = 1;
         }
 
+        // 当有集数查询时，剧集类型（电视剧/国产剧）优先于电影
+        if (season && episode) {
+            const animeType = (anime.type || '').toLowerCase();
+            if (animeType.includes('剧') || animeType.includes('电视剧') || animeType.includes('国产剧')) {
+                currentScore += 100;
+            }
+        }
+
         // 赋予手动指定偏好最高分数权重，确保其在多源匹配中具有绝对优先级
         if (isPreferredAnime) {
             currentScore += 9999;
@@ -1394,12 +1402,13 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
             };
         }
 
-        // 如果没有指定平台偏好 (platform 为空) 或已命中最高优先级的手动优选，立刻跳出查找
-        if (!platform || isPreferredAnime) {
-            break; 
+        // 手动优选最高优先级，立即跳出
+        if (isPreferredAnime) {
+            break;
         }
         
-        // 如果指定了平台偏好，则继续循环查找是否有得分更高的源（最小杂质匹配）
+        // 如果没有指定平台偏好，继续遍历搜索所有结果，用评分系统选出最佳匹配
+        // （避免像"风筝"这样同名的电影误匹配到电视剧前）
     }
   }
 
