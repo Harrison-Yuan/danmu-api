@@ -1789,18 +1789,22 @@ export async function matchAnime(url, req, clientIp) {
       if (clientIp && !spilloverMatched) {
         setLastSearch(clientIp, { title, season, episode, episodeId: resEpisode.episodeId });
       }
-      resData["matches"] = [
-        AnimeMatch.fromJson({
-          "episodeId": resEpisode.episodeId,
-          "animeId": resAnime.animeId,
-          "animeTitle": resAnime.animeTitle,
-          "episodeTitle": resEpisode.episodeTitle,
-          "type": resAnime.type,
-          "typeDescription": resAnime.typeDescription,
-          "shift": 0,
-          "imageUrl": resAnime.imageUrl
-        })
-      ]
+      // matches 数组已在传统匹配流程中通过 platformMatches + allMatchesCollector 填充
+      // 只有 fallback 匹配路径（matches 为空）时才需要补充
+      if (resData["matches"].length === 0) {
+        resData["matches"] = [
+          AnimeMatch.fromJson({
+            "episodeId": resEpisode.episodeId,
+            "animeId": resAnime.animeId,
+            "animeTitle": resAnime.animeTitle,
+            "episodeTitle": resEpisode.episodeTitle,
+            "type": resAnime.type,
+            "typeDescription": resAnime.typeDescription,
+            "shift": 0,
+            "imageUrl": resAnime.imageUrl
+          })
+        ]
+      }
     }
 
     log("info", `[system] [Match] resMatchData: ${resData}`);
