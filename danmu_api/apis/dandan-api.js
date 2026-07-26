@@ -1232,7 +1232,7 @@ function findCrossSeasonEpisodeMap(searchData, title, year, season, episode, pla
   return { resEpisode: bestRes.episode, resAnime: bestRes.anime };
 }
 
-async function matchAniAndEp(season, episode, year, searchData, title, req, platform, preferAnimeId, offsets, detailStore = null) {
+async function matchAniAndEp(season, episode, year, searchData, title, req, platform, preferAnimeId, offsets, detailStore = null, matchCollector = null) {
   // 定义最佳匹配结果容器
   let bestRes = {
     anime: null,
@@ -1406,7 +1406,12 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
         if (isPreferredAnime) {
             break;
         }
-        
+
+        // 无平台偏好时收集所有有效匹配，供客户端 fallback 使用
+        if (matchCollector && !platform && anime.source) {
+            matchCollector.push({ anime, episode: matchedEpisode });
+        }
+
         // 如果没有指定平台偏好，继续遍历搜索所有结果，用评分系统选出最佳匹配
         // （避免像"风筝"这样同名的电影误匹配到电视剧前）
     }
@@ -1714,8 +1719,9 @@ export async function matchAnime(url, req, clientIp) {
     } else {
       // AI匹配失败或未配置，使用传统匹配方式，收集所有平台的匹配结果
       const platformMatches = [];
+      const allMatchesCollector = []; // 无平台偏好时收集所有有效匹配
       for (const platform of dynamicPlatformOrder) {
-        const __ret = await matchAniAndEp(season, episode, year, searchData, title, req, platform, preferAnimeId, offsets, requestAnimeDetailsMap);
+        const __ret = await matchAniAndEp(season, episode, year, searchData, title, req, platform, preferAnimeId, offsets, requestAnimeDetailsMap, allMatchesCollector);
         const pEpisode = __ret.resEpisode;
         const pAnime = __ret.resAnime;
 
@@ -1733,6 +1739,7 @@ export async function matchAnime(url, req, clientIp) {
         }
       }
       // 将所有平台匹配结果加入 matches 数组
+      const matchedSet = new Set(platformMatches.map(m => `${m.anime.animeId}:${m.episode.episodeId}`));
       for (const { anime, episode } of platformMatches) {
         resData["matches"].push(
           AnimeMatch.fromJson({
@@ -1746,6 +1753,26 @@ export async function matchAnime(url, req, clientIp) {
             "imageUrl": anime.imageUrl
           })
         );
+      }
+      // 补充所有匹配收集器中不重复的结果（当 dynamicPlatformOrder=[null] 时，
+      // matchAniAndEp 内部收集了所有源的匹配，需要一并返回供客户端 fallback）
+      for (const { anime, episode } of allMatchesCollector) {
+        const key = `${anime.animeId}:${episode.episodeId}`;
+        if (!matchedSet.has(key)) {
+          matchedSet.add(key);
+          resData["matches"].push(
+            AnimeMatch.fromJson({
+              "episodeId": episode.episodeId,
+              "animeId": anime.animeId,
+              "animeTitle": anime.animeTitle,
+              "episodeTitle": episode.episodeTitle,
+              "type": anime.type,
+              "typeDescription": anime.typeDescription,
+              "shift": 0,
+              "imageUrl": anime.imageUrl
+            })
+          );
+        }
       }
 
       // 如果都没有找到则返回第一个满足剧集数的剧集
